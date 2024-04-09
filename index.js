@@ -4,56 +4,62 @@ const { chromium } = require("playwright");
 const { exit } = require("process");
 const inquirer = require("inquirer");
 
-var [url, file, format] = process.argv.slice(3);
+var [url, file, format, ignoreZeroVotes] = process.argv.slice(2);
 
-if (!url) {
-  const questions = [
-    {
-      type: "input",
-      name: "url",
-      message: "Please enter the board URL: ",
-      validate: (input) => {
-        if (input.trim() === "") {
-          return "URL can't be empty";
-        }
-        return true;
+async function askForInput() {
+  if (!url) {
+    ({ url } = await inquirer.prompt([
+      {
+        type: "input",
+        name: "url",
+        message: "Board URL:",
+        validate: validateUrl,
       },
-    },
-  ];
-  inquirer.prompt(questions).then((answers) => {
-    url = answers.url;
-    if (!file) {
-      const questions = [
-        {
-          type: "input",
-          name: "file",
-          message: "Please enter the output file path: ",
-          validate: (input) => {
-            if (input.trim() === "") {
-              return "Path can't be empty";
-            }
-            return true;
-          },
-        },
-      ];
-      inquirer.prompt(questions).then((answers) => {
-        file = answers.file;
-        if (!format) {
-          const questions = [
-            {
-              type: "list",
-              name: "format",
-              message: "Please select the output format: ",
-              choices: ["txt", "csv"],
-            },
-          ];
-          inquirer.prompt(questions).then((answers) => {
-            format = answers.format;
-          });
-        }
-      });
-    }
-  });
+    ]));
+  }
+  if (!file) {
+    ({ file } = await inquirer.prompt([
+      {
+        type: "input",
+        name: "file",
+        message: "Output file path:",
+        validate: validateFilePath,
+      },
+    ]));
+  }
+  if (!format) {
+    ({ format } = await inquirer.prompt([
+      {
+        type: "list",
+        name: "format",
+        message: "Export format:",
+        choices: ["txt", "csv"],
+      },
+    ]));
+  }
+  if (!ignoreZeroVotes) {
+    ({ ignoreZeroVotes } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "ignoreZeroVotes",
+        message: "Ignore items with zero votes?",
+      },
+    ]));
+  }
+}
+
+function validateUrl(url) {
+  if (!url.trim()) {
+    return "URL can't be empty";
+  }
+  return true;
+}
+
+function validateFilePath(filePath) {
+  if (!filePath.trim()) {
+    return "Path can't be empty";
+  }
+  return true;
 }
 
 async function scrape() {
@@ -79,24 +85,30 @@ async function scrape() {
 
         return {
           name: columnName,
-          messages: await Promise.all(
-            messages.map(async (message) => {
-              const text = await message.$eval(
-                ".easy-card-main .easy-card-main-content .text",
-                (node) => node.innerText.trim()
-              );
-              const votes = await message.$eval(
-                ".easy-card-votes-container .easy-badge-votes",
-                (node) => node.innerText.trim()
-              );
-
-              return { text, votes };
-            })
-          ),
+          messages: (
+            await Promise.all(
+              messages.map(async (message) => {
+                const text = await message.$eval(
+                  ".easy-card-main .easy-card-main-content .text",
+                  (node) => node.innerText.trim()
+                );
+                const votes = parseInt(
+                  await message.$eval(
+                    ".easy-card-votes-container .easy-badge-votes",
+                    (node) => node.innerText.trim()
+                  )
+                );
+                const ignored = ignoreZeroVotes && votes === 0;
+                return ignored ? null : { text, votes };
+              })
+            )
+          ).filter(Boolean),
         };
       })
     ),
   };
+
+  await browser.close();
 
   return board;
 }
@@ -113,22 +125,20 @@ function formatBoardToText(board) {
 }
 
 function formatBoardToCsv(board) {
-  const columnHeaders = board.columns.map(column => column.name);
-  const rows = board.columns.map(column => column.messages);
+  const columnHeaders = board.columns.map((column) => column.name);
+  const rows = board.columns.map((column) => column.messages);
 
-  const maxMessages = Math.max(...rows.map(messages => messages.length));
+  const maxMessages = Math.max(...rows.map((messages) => messages.length));
 
   let csvContent = columnHeaders.join(",") + "\n";
 
   for (let i = 0; i < maxMessages; i++) {
-    csvContent += rows
-      .map(messages => `"${messages[i]?.text || ""}"`)
-      .join(",") + "\n";
+    csvContent +=
+      rows.map((messages) => `"${messages[i]?.text || ""}"`).join(",") + "\n";
   }
 
   return csvContent;
 }
-
 
 function writeToFile(filePath, data) {
   const resolvedPath = path.resolve(
@@ -138,15 +148,24 @@ function writeToFile(filePath, data) {
     if (error) {
       throw error;
     } else {
-      console.log(`Successfully written to file at: ${resolvedPath}`);
+      console.log(`Successfully exported to ${resolvedPath}`);
+      exit();
     }
-    process.exit();
   });
 }
 
 function handleError(error) {
-  console.error(error);
+  throw error;
 }
 
-console.log(`Exporting "${url}" to "${file}"...`);
-scrape().then((data) => writeToFile(file, formatBoardToCsv(data)));
+async function main() {
+  await askForInput();
+
+  const board = await scrape();
+  const data =
+    format === "txt" ? formatBoardToText(board) : formatBoardToCsv(board);
+  writeToFile(file, data);
+}
+
+main().catch(handleError);
+
