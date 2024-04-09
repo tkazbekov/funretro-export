@@ -9,11 +9,17 @@
 It's required to have [npm](https://www.npmjs.com/get-npm) installed locally to follow the instructions.
 
 ```shell
-git clone https://github.com/julykaz/funretro-export.git
+git clone https://github.com/tkazbekov/funretro-export.git
 cd funretro-export
 npm install
-npm start -- "http://funretro.io/board..." "../exported-file.txt"
+npm start
 ```
+You can also execute it as a shorthand.
+```shell
+npm start -- "https://easyretro.io/publicboard/..." "fileName" "txt"
+```
+
+Possible formats are `txt` and `csv`
 
 ## Issues
 
@@ -30,7 +36,7 @@ PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=true npm i -D playwright
 ## TODO
 
 - Export card comments
-- More export options (PDF, CSV)
+- More export options (PDF)
 
 ## Licensing
 
