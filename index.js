@@ -2,12 +2,58 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 const { exit } = require("process");
-const { stringify } = require("querystring");
+const inquirer = require("inquirer");
 
-const [url, file] = process.argv.slice(2);
+var [url, file, format] = process.argv.slice(3);
 
 if (!url) {
-  throw "Please provide a URL as the first argument.";
+  const questions = [
+    {
+      type: "input",
+      name: "url",
+      message: "Please enter the board URL: ",
+      validate: (input) => {
+        if (input.trim() === "") {
+          return "URL can't be empty";
+        }
+        return true;
+      },
+    },
+  ];
+  inquirer.prompt(questions).then((answers) => {
+    url = answers.url;
+    if (!file) {
+      const questions = [
+        {
+          type: "input",
+          name: "file",
+          message: "Please enter the output file path: ",
+          validate: (input) => {
+            if (input.trim() === "") {
+              return "Path can't be empty";
+            }
+            return true;
+          },
+        },
+      ];
+      inquirer.prompt(questions).then((answers) => {
+        file = answers.file;
+        if (!format) {
+          const questions = [
+            {
+              type: "list",
+              name: "format",
+              message: "Please select the output format: ",
+              choices: ["txt", "csv"],
+            },
+          ];
+          inquirer.prompt(questions).then((answers) => {
+            format = answers.format;
+          });
+        }
+      });
+    }
+  });
 }
 
 async function scrape() {

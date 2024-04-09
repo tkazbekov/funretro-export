@@ -9,7 +9,9 @@
   },
   "author": "Julius Morkūnas",
   "license": "MIT",
-  "dependencies": {},
+  "dependencies": {
+    "inquirer": "^8.2.6"
+  },
   "devDependencies": {
     "playwright": "^1.42.1"
   }
